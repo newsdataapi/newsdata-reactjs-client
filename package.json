@@ -1,0 +1,58 @@
+{
+  "name": "newsdata-reactjs-client",
+  "version": "1.0.4",
+  "description": "Official React.js client (SDK) for the Newsdata.io News API — drop-in hooks (useLatestNews, useArchiveNews, useCryptoNews, useMarketNews, …) and a Provider for real-time, historical, crypto, and stock-market news, with validation, retries, and typed errors.",
+  "type": "module",
+  "main": "src/index.js",
+  "types": "types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "types",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "react": "^18.3.1"
+  },
+  "keywords": [
+    "react",
+    "reactjs",
+    "react-hooks",
+    "newsdata",
+    "newsdata-io",
+    "news-api",
+    "news",
+    "rest-api",
+    "api-client",
+    "sdk",
+    "crypto-news",
+    "financial-news",
+    "market-news",
+    "news-aggregator"
+  ],
+  "author": "NewsData.io <contact@newsdata.io> (https://newsdata.io)",
+  "license": "MIT",
+  "homepage": "https://newsdata.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/newsdataapi/newsdata-reactjs-client.git"
+  },
+  "bugs": {
+    "url": "https://github.com/newsdataapi/newsdata-reactjs-client/issues"
+  }
+}

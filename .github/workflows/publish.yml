@@ -1,0 +1,62 @@
+name: Publish to npm
+
+# Publishes to npm when a GitHub Release is published. Create a release whose
+# tag matches the version in package.json (e.g. tag "0.0.2").
+#
+# NOTE on the FIRST publish of this package: OIDC trusted publishing requires
+# the package to already exist on npm so a Trusted Publisher can be attached to
+# it. Publish 0.0.1 manually once with `npm publish`, then configure the
+# Trusted Publisher on npmjs.com, and every later release uses this workflow
+# (no token).
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # required for OIDC trusted publishing + provenance
+
+jobs:
+  publish:
+    name: Test & publish
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/newsdata-reactjs-client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      # OIDC trusted publishing requires npm >= 11.5.1; the bundled npm is older.
+      - name: Upgrade npm (for OIDC trusted publishing)
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run tests
+        run: npm test
+
+      # Guard against publishing a tag that doesn't match package.json.
+      - name: Verify tag matches package version
+        run: |
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME}"
+          if [ "$PKG_VERSION" != "$TAG" ]; then
+            echo "::error::Release tag '$TAG' does not match package.json version '$PKG_VERSION'"
+            exit 1
+          fi
+
+      # Tokenless OIDC trusted publishing — no NPM_TOKEN required. Provenance is
+      # generated automatically. One-time setup on npmjs.com: open the package
+      # → Settings → Trusted Publisher → add a GitHub Actions publisher with
+      #   Organization or user: newsdataapi
+      #   Repository:           newsdata-reactjs-client
+      #   Workflow filename:    publish.yml
+      #   Environment:          npm   (optional; matches `environment:` above)
+      - name: Publish to npm
+        run: npm publish --provenance --access public
