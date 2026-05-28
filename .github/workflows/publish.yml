@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: npm
-      url: https://www.npmjs.com/package/newsdata-reactjs-client
+      url: https://www.npmjs.com/package/newsdataapi
     steps:
       - uses: actions/checkout@v4
 

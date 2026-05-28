@@ -2,7 +2,7 @@
 // Requires a JSX-aware bundler (Vite, Next, CRA, etc.).
 
 import React from 'react';
-import { NewsDataProvider, useLatestNews } from 'newsdata-reactjs-client';
+import { NewsDataProvider, useLatestNews } from 'newsdataapi';
 
 function LatestHeadlines() {
   const { data, error, isLoading } = useLatestNews({

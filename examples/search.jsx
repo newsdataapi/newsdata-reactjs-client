@@ -2,7 +2,7 @@
 // `refetch` returned by the hook.
 
 import React, { useEffect, useState } from 'react';
-import { NewsDataProvider, useLatestNews } from 'newsdata-reactjs-client';
+import { NewsDataProvider, useLatestNews } from 'newsdataapi';
 
 function SearchBox() {
   const [query, setQuery] = useState('');

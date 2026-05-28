@@ -2,8 +2,8 @@
 
 # Newsdata.io React.js Client
 
-[![npm version](https://img.shields.io/npm/v/newsdata-reactjs-client?logo=npm&color=cb3837)](https://www.npmjs.com/package/newsdata-reactjs-client)
-[![npm downloads](https://img.shields.io/npm/dm/newsdata-reactjs-client?color=cb3837)](https://www.npmjs.com/package/newsdata-reactjs-client)
+[![npm version](https://img.shields.io/npm/v/newsdataapi?logo=npm&color=cb3837)](https://www.npmjs.com/package/newsdataapi)
+[![npm downloads](https://img.shields.io/npm/dm/newsdataapi?color=cb3837)](https://www.npmjs.com/package/newsdataapi)
 [![CI](https://img.shields.io/github/actions/workflow/status/newsdataapi/newsdata-reactjs-client/ci.yml?branch=main&logo=github&label=CI)](https://github.com/newsdataapi/newsdata-reactjs-client/actions/workflows/ci.yml)
 [![React](https://img.shields.io/badge/react-%3E%3D18-61dafb?logo=react)](https://react.dev)
 [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
@@ -22,7 +22,7 @@ Zero runtime dependencies, no build step, React 18+ as a peer dependency.
 ## Installation
 
 ```bash
-npm install newsdata-reactjs-client
+npm install newsdataapi
 # react is a peer dependency
 npm install react
 ```
@@ -30,7 +30,7 @@ npm install react
 ## Quickstart
 
 ```jsx
-import { NewsDataProvider, useLatestNews } from 'newsdata-reactjs-client';
+import { NewsDataProvider, useLatestNews } from 'newsdataapi';
 
 function Headlines() {
   const { data, error, isLoading } = useLatestNews({
@@ -119,7 +119,7 @@ Two ways to wire it up:
 </NewsDataProvider>
 
 // 2. Or pass your own pre-built client (full control over its lifecycle).
-import { NewsDataApiClient } from 'newsdata-reactjs-client';
+import { NewsDataApiClient } from 'newsdataapi';
 const client = new NewsDataApiClient(apiKey);
 
 <NewsDataProvider client={client}>
@@ -130,7 +130,7 @@ const client = new NewsDataApiClient(apiKey);
 Anywhere inside the provider you can grab the client directly:
 
 ```js
-import { useNewsDataClient } from 'newsdata-reactjs-client';
+import { useNewsDataClient } from 'newsdataapi';
 
 function ExportButton() {
   const client = useNewsDataClient();
@@ -146,7 +146,7 @@ All hook errors are instances of the typed hierarchy from the core SDK:
 import {
   NewsdataValidationError, NewsdataAuthError, NewsdataRateLimitError,
   NewsdataApiError, NewsdataNetworkError,
-} from 'newsdata-reactjs-client';
+} from 'newsdataapi';
 
 if (error instanceof NewsdataRateLimitError) {
   console.log('retry after', error.retryAfter, 'seconds');
@@ -173,7 +173,7 @@ You can also use the underlying client without React — same surface as
 `newsdata-nodejs-client`:
 
 ```js
-import { NewsDataApiClient } from 'newsdata-reactjs-client';
+import { NewsDataApiClient } from 'newsdataapi';
 
 const client = new NewsDataApiClient(apiKey, { timeout: 10_000 });
 

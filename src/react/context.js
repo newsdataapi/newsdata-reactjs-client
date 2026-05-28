@@ -3,7 +3,7 @@
 // Written in plain JS (no JSX) so the package needs no build step. Consumers
 // import the Provider and render it at the top of their app:
 //
-//   import { NewsDataProvider } from 'newsdata-reactjs-client';
+//   import { NewsDataProvider } from 'newsdataapi';
 //   <NewsDataProvider apiKey={process.env.REACT_APP_NEWSDATA_API_KEY}>
 //     <App />
 //   </NewsDataProvider>

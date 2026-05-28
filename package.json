@@ -1,5 +1,5 @@
 {
-  "name": "newsdata-reactjs-client",
+  "name": "newsdataapi",
   "version": "1.0.4",
   "description": "Official React.js client (SDK) for the Newsdata.io News API — drop-in hooks (useLatestNews, useArchiveNews, useCryptoNews, useMarketNews, …) and a Provider for real-time, historical, crypto, and stock-market news, with validation, retries, and typed errors.",
   "type": "module",

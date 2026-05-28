@@ -1,4 +1,4 @@
-// Type definitions for newsdata-reactjs-client.
+// Type definitions for the newsdataapi npm package (newsdata-reactjs-client repo).
 
 import type { ReactNode } from 'react';
 
