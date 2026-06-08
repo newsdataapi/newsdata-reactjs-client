@@ -9,6 +9,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/newsdataapi/newsdata-reactjs-client/ci.yml?branch=main&logo=github&label=CI)](https://github.com/newsdataapi/newsdata-reactjs-client/actions/workflows/ci.yml)
 [![React](https://img.shields.io/badge/react-%3E%3D18-61dafb?logo=react)](https://react.dev)
 [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-85EA2D)](https://newsdata.io/openapi.json)
 
 </div>
 
