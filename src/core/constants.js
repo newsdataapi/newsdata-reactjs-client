@@ -78,7 +78,7 @@ export const FILTERS = Object.freeze({
     'excludecountry', 'domain', 'domainurl', 'excludedomain', 'language',
     'excludelanguage', 'prioritydomain', 'timezone', 'timeframe', 'size',
     'full_content', 'image', 'video', 'page', 'tag', 'sentiment',
-    'excludefield', 'removeduplicate', 'organization', 'symbol', 'id', 'url',
+    'excludefield', 'removeduplicate', 'organization', 'market_id', 'id', 'url',
     'sort', 'creator', 'datatype', 'sentiment_score',
   ],
   count: [
@@ -99,7 +99,7 @@ export const FILTERS = Object.freeze({
     'from_date', 'to_date', 'q', 'qintitle', 'qinmeta', 'country',
     'excludecountry', 'domain', 'domainurl', 'excludedomain', 'language',
     'excludelanguage', 'full_content', 'image', 'video', 'organization',
-    'symbol', 'prioritydomain', 'page', 'sentiment', 'removeduplicate', 'size',
+    'market_id', 'prioritydomain', 'page', 'sentiment', 'removeduplicate', 'size',
     'sort', 'tag', 'interval', 'creator', 'datatype', 'sentiment_score',
   ],
 });
