@@ -28,7 +28,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: `npm@latest` is now npm 12, which requires
+          # node ^22.22.2 || ^24.15.0 || >=26. On Node 20 the upgrade step
+          # below fails with EBADENGINE before publish is ever reached.
+          node-version: 22
           registry-url: https://registry.npmjs.org
 
       # OIDC trusted publishing requires npm >= 11.5.1; the bundled npm is older.
