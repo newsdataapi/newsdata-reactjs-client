@@ -31,6 +31,11 @@ test('exposes one hook per endpoint', () => {
   }
 });
 
+test('exposes the real-time stream hook and WebSocket class', () => {
+  assert.equal(typeof pkg.useNewsStream, 'function');
+  assert.equal(typeof pkg.NewsDataApiWebSocket, 'function');
+});
+
 test('re-exports the core client and error hierarchy', () => {
   assert.equal(typeof pkg.NewsDataApiClient, 'function');
   for (const name of [
@@ -41,6 +46,8 @@ test('re-exports the core client and error hierarchy', () => {
     'NewsdataRateLimitError',
     'NewsdataServerError',
     'NewsdataNetworkError',
+    'NewsdataWebSocketError',
+    'NewsdataWebSocketAuthError',
   ]) {
     assert.equal(typeof pkg[name], 'function', `${name} should be a class`);
   }

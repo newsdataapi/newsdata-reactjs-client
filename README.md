@@ -77,6 +77,7 @@ export default function App() {
 | `useNewsCount(params)` | `/1/count` | Aggregate counts (requires `from_date`, `to_date`) |
 | `useCryptoCount(params)` | `/1/crypto/count` | Aggregate crypto counts |
 | `useMarketCount(params)` | `/1/market/count` | Aggregate market counts |
+| `useNewsStream(registrationId)` | `wss://ws.newsdata.io/ws/event` | Real-time stream ([below](#real-time-news-websocket)) |
 
 Every hook has the same shape:
 
@@ -110,6 +111,85 @@ useLatestNews({ country: ['us', 'gb'], language: 'en', size: 20 });
 
 Inline param objects are safe — the hook compares by **value**, not reference,
 so re-renders only re-fetch when the values change.
+
+## Real-time news (WebSocket)
+
+`useNewsStream` opens a real-time connection for a **registered query** and
+accumulates the matching articles. Register the query first — the returned
+`registration_id` identifies it from then on:
+
+```jsx
+import { useEffect, useState } from 'react';
+import { useNewsDataClient, useNewsStream } from 'newsdataapi';
+
+function BitcoinTicker() {
+  const client = useNewsDataClient();
+  const [registrationId, setRegistrationId] = useState(null);
+
+  useEffect(() => {
+    client.websocketRegister({ q: 'bitcoin', language: 'en' })
+      .then(({ results }) => setRegistrationId(results.registration_id));
+  }, [client]);
+
+  // A falsy id defers connecting until registration resolves.
+  const { articles, error, isConnected } = useNewsStream(registrationId);
+
+  if (error) return <p>Stream error: {error.message}</p>;
+
+  return (
+    <>
+      <p>{isConnected ? 'live' : 'connecting…'}</p>
+      <ul>
+        {articles.map((a) => <li key={a.article_id}>{a.title}</li>)}
+      </ul>
+    </>
+  );
+}
+```
+
+The hook returns `{ articles, latest, error, isConnected }`. Articles
+accumulate **newest first** and are capped at `maxArticles` (default 100) so a
+long-lived stream can't grow without bound. The connection opens on mount,
+closes on unmount, and reconnects through a capped exponential backoff.
+
+```jsx
+const { articles, latest } = useNewsStream(registrationId, {
+  enabled: true,      // defer connecting when false
+  maxArticles: 100,   // cap on retained articles
+  reconnect: true,    // auto-reconnect on transient drops
+});
+```
+
+`error` is set for a permanent rejection — bad API key or unknown `registration_id`,
+exhausted API credits, or too many simultaneous devices — which surfaces as `NewsdataWebSocketAuthError` and is **not** retried.
+
+The server always accepts the handshake and then closes with code **1008** when
+the connection is refused, carrying one of three reasons: `invalid credentials
+or registration not found`, `api limit reached`, or `device limit reached` (more
+than 5 devices on one `registration_id`). Every other close code — including
+`1013` (`send timeout`, meaning the client read too slowly) — is transient and
+reconnects.
+
+**Each delivered article consumes 1 API credit per connected device.**
+
+Transient drops reconnect silently and leave `error` null.
+
+Managing registered queries goes through the client:
+`websocketRegister(params)`, `websocketFetch()`, and
+`websocketDelete(registrationId)`. Registering an identical query twice
+rejects with a `NewsdataApiError` whose `statusCode` is 409; the existing id is
+at `err.responseBody.results.registration_id`.
+
+Outside React, use the same `NewsDataApiWebSocket` class the hook wraps:
+
+```js
+import { NewsDataApiWebSocket } from 'newsdataapi';
+
+const ws = new NewsDataApiWebSocket(client);
+for await (const response of ws.stream(registrationId)) {
+  console.log(response.results);
+}
+```
 
 ## Provider
 
@@ -163,7 +243,9 @@ NewsdataError                       (catch-all base)
 │   ├── NewsdataAuthError           (401 / 403)
 │   ├── NewsdataRateLimitError      (429; .retryAfter)
 │   └── NewsdataServerError         (5xx)
-└── NewsdataNetworkError            (.cause)
+├── NewsdataNetworkError            (.cause)
+└── NewsdataWebSocketError          (real-time stream)
+    └── NewsdataWebSocketAuthError  (policy-violation close 1008)
 ```
 
 Validation errors are thrown **before** the request is sent (no API quota

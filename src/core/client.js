@@ -3,6 +3,9 @@
 import {
   BASE_URL,
   ENDPOINTS,
+  ENDPOINT_METHODS,
+  RESULTS_OPTIONAL,
+  WS_NEWS_TYPE,
   DEFAULT_REQUEST_TIMEOUT,
   DEFAULT_MAX_RETRIES,
   DEFAULT_RETRY_BACKOFF,
@@ -124,6 +127,67 @@ export class NewsDataApiClient {
     return this.#request('sources', validated);
   }
 
+  // ---- real-time query management ---------------------------------------
+
+  /**
+   * Register a real-time WebSocket query. POST /1/websocket/register
+   *
+   * Takes the familiar filter names (`q`, `country`, `language`, `domain`, …);
+   * no date or paging filters apply, since a registered query matches news as
+   * it is published. The new query's id is at `results.registration_id` — pass
+   * it to `NewsDataApiWebSocket#stream`.
+   *
+   * Registering an identical query twice rejects with a `NewsdataApiError`
+   * whose `statusCode` is 409; the existing id is at
+   * `err.responseBody.results.registration_id`.
+   * @returns {Promise<object>}
+   */
+  websocketRegister(params = {}) {
+    const { rawQuery = null, ...rest } = params;
+    const validated = validateParams('websocket_register', rest, rawQuery);
+    validated.news_type = WS_NEWS_TYPE;
+    return this.#request('websocket_register', validated);
+  }
+
+  /**
+   * List the account's registered real-time queries. GET /1/websocket/fetch
+   * One entry per query at `results.queries`.
+   * @returns {Promise<object>}
+   */
+  websocketFetch() {
+    return this.#request('websocket_fetch', {});
+  }
+
+  /**
+   * Delete a registered real-time query. DELETE /1/websocket/delete
+   * @param {string} registrationId
+   * @returns {Promise<object>}
+   */
+  websocketDelete(registrationId) {
+    if (typeof registrationId !== 'string' || registrationId === '') {
+      throw new NewsdataValidationError(
+        'registrationId must be a non-empty string',
+        'registration_id',
+      );
+    }
+    return this.#request('websocket_delete', { registration_id: registrationId });
+  }
+
+  /** The API key, for the WebSocket handshake URL. @internal */
+  get apiKeyForWebSocket() {
+    return this.#apiKey;
+  }
+
+  /** The configured fetch, reused by the WebSocket handshake probe. @internal */
+  get fetchForWebSocket() {
+    return this.#fetch;
+  }
+
+  /** Forward a log line from the WebSocket layer. @internal */
+  logForWebSocket(level, message) {
+    this.#log(level, message);
+  }
+
   // ---- dispatch ---------------------------------------------------------
 
   /**
@@ -179,16 +243,17 @@ export class NewsDataApiClient {
     const search = new URLSearchParams({ ...params, apikey: this.#apiKey });
     const fullUrl = `${this.#endpointUrl(endpoint)}?${search.toString()}`;
     const logUrl = redactApiKey(fullUrl);
+    const method = ENDPOINT_METHODS[endpoint] ?? 'GET';
 
     for (let attempt = 1; attempt <= this.#maxRetries; attempt += 1) {
-      this.#log('info', `GET ${logUrl} (attempt ${attempt}/${this.#maxRetries})`);
+      this.#log('info', `${method} ${logUrl} (attempt ${attempt}/${this.#maxRetries})`);
 
       let res;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.#timeout);
       try {
         res = await this.#fetch(fullUrl, {
-          method: 'GET',
+          method,
           headers: { Accept: 'application/json' },
           signal: controller.signal,
         });
@@ -220,7 +285,7 @@ export class NewsDataApiClient {
         throw new NewsdataApiError(`Non-JSON response from API (status ${status})`, status);
       }
 
-      if (status === 200 && this.#isSuccess(body)) {
+      if (status === 200 && this.#isSuccess(body, endpoint)) {
         if (this.#includeHeaders) {
           body.responseHeaders = Object.fromEntries(res.headers.entries());
         }
@@ -325,14 +390,11 @@ export class NewsDataApiClient {
     }
   }
 
-  #isSuccess(body) {
-    return (
-      body
-      && typeof body === 'object'
-      && body.status === 'success'
-      && body.results !== null
-      && body.results !== undefined
-    );
+  #isSuccess(body, endpoint) {
+    if (!body || typeof body !== 'object' || body.status !== 'success') return false;
+    // The websocket management endpoints may answer without a `results` field.
+    if (RESULTS_OPTIONAL.includes(endpoint)) return true;
+    return body.results !== null && body.results !== undefined;
   }
 
   #errorMessage(body, status) {
