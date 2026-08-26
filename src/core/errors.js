@@ -72,6 +72,31 @@ export class NewsdataServerError extends NewsdataApiError {
   }
 }
 
+/** A real-time WebSocket stream failure (NewsDataApiWebSocket). */
+export class NewsdataWebSocketError extends NewsdataError {
+  /**
+   * @param {string} message
+   * @param {Error|null} [cause] The underlying error.
+   */
+  constructor(message, cause = null) {
+    super(message);
+    this.name = 'NewsdataWebSocketError';
+    if (cause) this.cause = cause;
+  }
+}
+
+/**
+ * The server rejected the WebSocket connection — bad API key, missing
+ * WebSocket entitlement, unknown registration_id, device limit reached, or
+ * exhausted quota. Never retried, regardless of the `reconnect` setting.
+ */
+export class NewsdataWebSocketAuthError extends NewsdataWebSocketError {
+  constructor(message, cause = null) {
+    super(message, cause);
+    this.name = 'NewsdataWebSocketAuthError';
+  }
+}
+
 /** A network-level failure (DNS, TLS, timeout, abort) prevented the request. */
 export class NewsdataNetworkError extends NewsdataError {
   /**

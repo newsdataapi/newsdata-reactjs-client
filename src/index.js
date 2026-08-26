@@ -2,6 +2,7 @@
 
 // Core (re-exported so users can also use the client directly outside hooks).
 export { NewsDataApiClient, redactApiKey } from './core/client.js';
+export { NewsDataApiWebSocket } from './core/websocket.js';
 export { validateParams } from './core/validator.js';
 export * as constants from './core/constants.js';
 export {
@@ -12,6 +13,8 @@ export {
   NewsdataRateLimitError,
   NewsdataServerError,
   NewsdataNetworkError,
+  NewsdataWebSocketError,
+  NewsdataWebSocketAuthError,
 } from './core/errors.js';
 
 // React layer.
@@ -28,3 +31,4 @@ export {
   useCryptoCount,
   useMarketCount,
 } from './react/hooks.js';
+export { useNewsStream } from './react/useNewsStream.js';

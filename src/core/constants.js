@@ -28,7 +28,33 @@ export const ENDPOINTS = Object.freeze({
   count: 'count',
   crypto_count: 'crypto/count',
   market_count: 'market/count',
+  websocket_register: 'websocket/register',
+  websocket_fetch: 'websocket/fetch',
+  websocket_delete: 'websocket/delete',
 });
+
+// HTTP method per endpoint; anything absent is a GET.
+export const ENDPOINT_METHODS = Object.freeze({
+  websocket_register: 'POST',
+  websocket_delete: 'DELETE',
+});
+
+// The websocket management endpoints answer with a success envelope that may
+// carry no `results` field, so they are exempt from the results-present check
+// applied to the news endpoints.
+export const RESULTS_OPTIONAL = Object.freeze([
+  'websocket_register', 'websocket_fetch', 'websocket_delete',
+]);
+
+// Real-time WebSocket defaults (NewsDataApiWebSocket).
+export const WS_BASE_URL = 'wss://ws.newsdata.io/ws/event';
+// The feed a registered query matches against.
+export const WS_NEWS_TYPE = 'latest';
+// Close code the server uses for a permanent rejection.
+export const WS_POLICY_VIOLATION = 1008;
+export const WS_RECONNECT_DELAY = 1_000; // ms before the first reconnect; doubles each retry
+export const WS_RECONNECT_DELAY_MAX = 30_000; // cap on the reconnect delay
+export const WS_OPEN_TIMEOUT = 10_000; // ms to wait for the opening handshake
 
 // Endpoints that require both from_date and to_date.
 export const REQUIRES_DATE_RANGE = Object.freeze(['count', 'crypto_count', 'market_count']);
@@ -102,6 +128,19 @@ export const FILTERS = Object.freeze({
     'market_id', 'prioritydomain', 'page', 'sentiment', 'removeduplicate', 'size',
     'sort', 'tag', 'interval', 'creator', 'datatype', 'sentiment_score',
   ],
+  // Real-time query registration. No date/paging filters — a registered query
+  // matches news as it is published. `news_type` is set by websocketRegister,
+  // not by the caller.
+  websocket_register: [
+    'q', 'qintitle', 'qinmeta', 'country', 'excludecountry', 'category',
+    'excludecategory', 'language', 'excludelanguage', 'domain', 'domainurl',
+    'excludedomain', 'prioritydomain', 'timezone', 'full_content', 'image',
+    'video', 'removeduplicate', 'tag', 'sentiment', 'sentiment_score',
+    'region', 'organization', 'creator', 'datatype', 'excludefield',
+    'news_type',
+  ],
+  websocket_fetch: [],
+  websocket_delete: ['registration_id'],
 });
 
 // Control/meta keys accepted on endpoint methods but not sent as API params.
