@@ -5,6 +5,7 @@ import {
   ENDPOINTS,
   ENDPOINT_METHODS,
   RESULTS_OPTIONAL,
+  QUOTA_EXHAUSTED_CODES,
   WS_NEWS_TYPE,
   DEFAULT_REQUEST_TIMEOUT,
   DEFAULT_MAX_RETRIES,
@@ -28,6 +29,16 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /** Replace the apikey value in a URL with REDACTED, for safe logging. */
 export function redactApiKey(url) {
   return url.replace(/(apikey=)[^&]*/i, '$1REDACTED');
+}
+
+/**
+ * Whether a 429 body carries an error code meaning the account is out of API
+ * credits, as opposed to a transient rate limit.
+ */
+function isQuotaExhausted(body) {
+  const results = asObject(body)?.results;
+  const code = results && typeof results === 'object' ? results.code : undefined;
+  return typeof code === 'string' && QUOTA_EXHAUSTED_CODES.includes(code);
 }
 
 /** Parse a Retry-After header (integer seconds or HTTP-date) into ms. */
@@ -294,7 +305,9 @@ export class NewsDataApiClient {
 
       if (status === 429) {
         const retryAfter = parseRetryAfter(res.headers.get('retry-after'));
-        if (attempt >= this.#maxRetries) {
+        // A 429 covers a burst limit, a rate limit, and exhausted API
+        // credits. Only the first two are worth retrying.
+        if (isQuotaExhausted(body) || attempt >= this.#maxRetries) {
           throw new NewsdataRateLimitError(
             this.#errorMessage(body, status), 429, asObject(body),
             retryAfter === null ? null : Math.round(retryAfter / 1000),

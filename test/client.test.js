@@ -129,3 +129,41 @@ test('redactApiKey hides the key', () => {
     'https://newsdata.io/api/1/latest?apikey=REDACTED&q=foo',
   );
 });
+
+// A 429 covers a burst limit, a rate limit, and exhausted API credits. Only
+// the first two are worth retrying.
+for (const code of ['ApiLimitExceeded', 'ApiKeyLimitExceeded']) {
+  test(`429 with ${code} is not retried`, async () => {
+    const body = { status: 'error', results: { message: 'limit', code } };
+    const fetchStub = stubFetch([
+      mockResponse(429, body), mockResponse(429, body), mockResponse(429, body),
+    ]);
+    const client = new NewsDataApiClient('key', {
+      fetch: fetchStub, retryBackoff: 1, retryBackoffMax: 1,
+    });
+
+    await assert.rejects(
+      () => client.latestApi({ q: 'x' }),
+      (err) => {
+        assert.ok(err instanceof NewsdataRateLimitError, `got ${err.name}`);
+        assert.deepEqual(err.responseBody, body);
+        return true;
+      },
+    );
+    assert.equal(fetchStub.calls.length, 1, 'exhausted quota must not retry');
+  });
+}
+
+test('429 without a quota code still retries', async () => {
+  const fetchStub = stubFetch([
+    mockResponse(429, { status: 'error', results: { message: 'slow', code: 'RateLimitExceeded' } }),
+    mockResponse(200, ok([{ title: 'recovered' }])),
+  ]);
+  const client = new NewsDataApiClient('key', {
+    fetch: fetchStub, retryBackoff: 1, retryBackoffMax: 1,
+  });
+
+  const res = await client.latestApi({ q: 'x' });
+  assert.equal(res.results[0].title, 'recovered');
+  assert.equal(fetchStub.calls.length, 2);
+});

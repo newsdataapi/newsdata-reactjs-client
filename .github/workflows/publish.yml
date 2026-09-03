@@ -61,6 +61,19 @@ jobs:
             exit 1
           fi
 
+      # npm rejects a version that already exists, so a re-run of this
+      # workflow would fail on a release that published perfectly well.
+      - name: Skip if this version is already on npm
+        id: published
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "newsdataapi@$VERSION" version >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::newsdataapi@$VERSION is already on npm; skipping the publish (versions are immutable). Bump the version to publish again."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Tokenless OIDC trusted publishing — no NPM_TOKEN required. Provenance is
       # generated automatically. One-time setup on npmjs.com: open the package
       # → Settings → Trusted Publisher → add a GitHub Actions publisher with
@@ -69,4 +82,5 @@ jobs:
       #   Workflow filename:    publish.yml
       #   Environment:          npm   (optional; matches `environment:` above)
       - name: Publish to npm
+        if: steps.published.outputs.already != 'true'
         run: npm publish --provenance --access public
