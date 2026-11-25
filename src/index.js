@@ -11,6 +11,8 @@ export {
   NewsdataApiError,
   NewsdataAuthError,
   NewsdataRateLimitError,
+  NewsdataApiLimitExceededError,
+  NewsdataApiKeyLimitExceededError,
   NewsdataServerError,
   NewsdataNetworkError,
   NewsdataWebSocketError,
@@ -30,5 +32,12 @@ export {
   useNewsCount,
   useCryptoCount,
   useMarketCount,
+  useNews,
+  useMarket,
+  useCrypto,
+  useSources,
+  useCountNews,
+  useCountMarket,
+  useCountCrypto,
 } from './react/hooks.js';
 export { useNewsStream } from './react/useNewsStream.js';

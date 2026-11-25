@@ -130,9 +130,9 @@ test('redactApiKey hides the key', () => {
   );
 });
 
-// A 429 covers a burst limit, a rate limit, and exhausted API credits. Only
-// the first two are worth retrying.
-for (const code of ['ApiLimitExceeded', 'ApiKeyLimitExceeded']) {
+// A 429 covers a burst limit, a rate limit, exhausted API credits, and a
+// full set of real-time registrations. Only the first two are worth retrying.
+for (const code of ['ApiLimitExceeded', 'ApiKeyLimitExceeded', 'RegistrationLimitExceeded']) {
   test(`429 with ${code} is not retried`, async () => {
     const body = { status: 'error', results: { message: 'limit', code } };
     const fetchStub = stubFetch([

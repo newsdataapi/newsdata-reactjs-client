@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNewsDataClient } from './context.js';
 
 const ENDPOINT_METHODS = [
+  // v1
   'latestApi',
   'archiveApi',
   'cryptoApi',
@@ -30,6 +31,14 @@ const ENDPOINT_METHODS = [
   'countApi',
   'cryptoCountApi',
   'marketCountApi',
+  // v2
+  'news',
+  'market',
+  'crypto',
+  'sources',
+  'countNews',
+  'countMarket',
+  'countCrypto',
 ];
 
 /**
@@ -138,6 +147,27 @@ export const useNewsCount = createNewsDataHook('countApi');
 export const useCryptoCount = createNewsDataHook('cryptoCountApi');
 /** Hook for /1/market/count — aggregate market counts (requires dates). */
 export const useMarketCount = createNewsDataHook('marketCountApi');
+
+// ---- v2 ------------------------------------------------------------------
+//
+// v2 takes the snake_case filter vocabulary (`q_in_title`, `exclude_country`,
+// `source_url`, `source_priority`, `content`, `remove_duplicate`, …) and
+// answers with `total_results` / `next_page`.
+
+/** Hook for /2/news — latest news, or historical with from_date / to_date. */
+export const useNews = createNewsDataHook('news');
+/** Hook for /2/market — market / financial news. */
+export const useMarket = createNewsDataHook('market');
+/** Hook for /2/crypto — cryptocurrency news. */
+export const useCrypto = createNewsDataHook('crypto');
+/** Hook for /2/sources — available news sources. */
+export const useSources = createNewsDataHook('sources');
+/** Hook for /2/count/news — aggregate news counts. */
+export const useCountNews = createNewsDataHook('countNews');
+/** Hook for /2/count/market — aggregate market counts. */
+export const useCountMarket = createNewsDataHook('countMarket');
+/** Hook for /2/count/crypto — aggregate crypto counts. */
+export const useCountCrypto = createNewsDataHook('countCrypto');
 
 function stableKey(value) {
   if (value == null) return '';

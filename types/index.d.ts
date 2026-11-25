@@ -16,15 +16,22 @@ export interface EndpointParams {
 
 export interface NewsdataResponse {
   status?: string;
+  /** v1 total; v2 answers with `total_results`. */
   totalResults?: number;
   results?: unknown;
+  /** v1 cursor; v2 answers with `next_page`. */
   nextPage?: string | null;
+  /** v2 total. */
+  total_results?: number;
+  /** v2 cursor. */
+  next_page?: string | null;
   responseHeaders?: Record<string, string>;
   aggregate?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
 export interface ClientOptions {
+  /** API root without a version segment; default https://newsdata.io/api */
   baseUrl?: string;
   timeout?: number;
   maxRetries?: number;
@@ -57,11 +64,27 @@ export class NewsDataApiClient {
   marketCountApi(params?: EndpointParams): EndpointResult;
   sourcesApi(params?: EndpointParams): Promise<NewsdataResponse>;
 
-  /** Register a real-time WebSocket query. POST /1/websocket/register */
+  /**
+   * v2 endpoints. The filter vocabulary is snake_case (`q_in_title`,
+   * `exclude_country`, `source_priority`, `content`, `remove_duplicate`, …)
+   * and `source_url` / `exclude_source_url` replace the four domain filters.
+   */
+  news(params?: EndpointParams): EndpointResult;
+  market(params?: EndpointParams): EndpointResult;
+  crypto(params?: EndpointParams): EndpointResult;
+  countNews(params?: EndpointParams): EndpointResult;
+  countMarket(params?: EndpointParams): EndpointResult;
+  countCrypto(params?: EndpointParams): EndpointResult;
+  sources(params?: EndpointParams): Promise<NewsdataResponse>;
+
+  /**
+   * Register a real-time WebSocket query. POST /2/websocket/register
+   * The real-time service is v2 only, so this takes the v2 filter names.
+   */
   websocketRegister(params?: EndpointParams): Promise<NewsdataResponse>;
-  /** List the account's registered real-time queries. GET /1/websocket/fetch */
+  /** List the account's registered real-time queries. GET /2/websocket/fetch */
   websocketFetch(): Promise<NewsdataResponse>;
-  /** Delete a registered real-time query. DELETE /1/websocket/delete */
+  /** Delete a registered real-time query. DELETE /2/websocket/delete */
   websocketDelete(registrationId: string): Promise<NewsdataResponse>;
 }
 
@@ -114,6 +137,10 @@ export class NewsdataAuthError extends NewsdataApiError {}
 export class NewsdataRateLimitError extends NewsdataApiError {
   retryAfter: number | null;
 }
+/** The account's whole pool of API credits is exhausted. */
+export class NewsdataApiLimitExceededError extends NewsdataRateLimitError {}
+/** This one API key's own credit cap is exhausted. */
+export class NewsdataApiKeyLimitExceededError extends NewsdataRateLimitError {}
 export class NewsdataServerError extends NewsdataApiError {}
 export class NewsdataNetworkError extends NewsdataError {
   cause?: Error;
@@ -169,6 +196,15 @@ export function useMarketNews(params?: EndpointParams, options?: UseQueryOptions
 export function useNewsCount(params?: EndpointParams, options?: UseQueryOptions): UseQueryResult;
 export function useCryptoCount(params?: EndpointParams, options?: UseQueryOptions): UseQueryResult;
 export function useMarketCount(params?: EndpointParams, options?: UseQueryOptions): UseQueryResult;
+
+/** v2 hooks. Take the snake_case filters; answer with total_results / next_page. */
+export function useNews(params?: EndpointParams, options?: UseQueryOptions): UseQueryResult;
+export function useMarket(params?: EndpointParams, options?: UseQueryOptions): UseQueryResult;
+export function useCrypto(params?: EndpointParams, options?: UseQueryOptions): UseQueryResult;
+export function useSources(params?: EndpointParams, options?: UseQueryOptions): UseQueryResult;
+export function useCountNews(params?: EndpointParams, options?: UseQueryOptions): UseQueryResult;
+export function useCountMarket(params?: EndpointParams, options?: UseQueryOptions): UseQueryResult;
+export function useCountCrypto(params?: EndpointParams, options?: UseQueryOptions): UseQueryResult;
 
 export interface UseNewsStreamOptions {
   /** Defer connecting when false. Default true. */

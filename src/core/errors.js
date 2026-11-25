@@ -64,6 +64,29 @@ export class NewsdataRateLimitError extends NewsdataApiError {
   }
 }
 
+/**
+ * Raised on 429 when the account's pool of API credits is exhausted, rather
+ * than a transient rate limit having been hit. Never retried.
+ */
+export class NewsdataApiLimitExceededError extends NewsdataRateLimitError {
+  constructor(message, statusCode = 429, responseBody = null, retryAfter = null) {
+    super(message, statusCode, responseBody, retryAfter);
+    this.name = 'NewsdataApiLimitExceededError';
+  }
+}
+
+/**
+ * Raised on 429 when this specific API key's own credit cap is exhausted,
+ * even though the account's overall pool may still have credits left.
+ * Never retried.
+ */
+export class NewsdataApiKeyLimitExceededError extends NewsdataRateLimitError {
+  constructor(message, statusCode = 429, responseBody = null, retryAfter = null) {
+    super(message, statusCode, responseBody, retryAfter);
+    this.name = 'NewsdataApiKeyLimitExceededError';
+  }
+}
+
 /** Raised on 5xx responses once retries are exhausted. */
 export class NewsdataServerError extends NewsdataApiError {
   constructor(message, statusCode = null, responseBody = null) {

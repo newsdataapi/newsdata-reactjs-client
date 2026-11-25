@@ -16,7 +16,7 @@ test('exposes the generic query hook and factory', () => {
   assert.equal(typeof pkg.createNewsDataHook, 'function');
 });
 
-test('exposes one hook per endpoint', () => {
+test('exposes one hook per v1 endpoint', () => {
   for (const name of [
     'useLatestNews',
     'useArchiveNews',
@@ -26,6 +26,20 @@ test('exposes one hook per endpoint', () => {
     'useNewsCount',
     'useCryptoCount',
     'useMarketCount',
+  ]) {
+    assert.equal(typeof pkg[name], 'function', `${name} should be a function`);
+  }
+});
+
+test('exposes one hook per v2 endpoint', () => {
+  for (const name of [
+    'useNews',
+    'useMarket',
+    'useCrypto',
+    'useSources',
+    'useCountNews',
+    'useCountMarket',
+    'useCountCrypto',
   ]) {
     assert.equal(typeof pkg[name], 'function', `${name} should be a function`);
   }
@@ -44,6 +58,8 @@ test('re-exports the core client and error hierarchy', () => {
     'NewsdataApiError',
     'NewsdataAuthError',
     'NewsdataRateLimitError',
+    'NewsdataApiLimitExceededError',
+    'NewsdataApiKeyLimitExceededError',
     'NewsdataServerError',
     'NewsdataNetworkError',
     'NewsdataWebSocketError',

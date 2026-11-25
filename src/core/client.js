@@ -20,6 +20,8 @@ import {
   NewsdataApiError,
   NewsdataAuthError,
   NewsdataRateLimitError,
+  NewsdataApiLimitExceededError,
+  NewsdataApiKeyLimitExceededError,
   NewsdataServerError,
   NewsdataNetworkError,
 } from './errors.js';
@@ -31,14 +33,33 @@ export function redactApiKey(url) {
   return url.replace(/(apikey=)[^&]*/i, '$1REDACTED');
 }
 
-/**
- * Whether a 429 body carries an error code meaning the account is out of API
- * credits, as opposed to a transient rate limit.
- */
-function isQuotaExhausted(body) {
+// Error code on a 429 => the error class to raise. None of them is worth
+// retrying, but the remedy differs: ApiLimitExceeded is the account's whole
+// credit pool, ApiKeyLimitExceeded is this one key's own cap, and
+// RegistrationLimitExceeded is the real-time registration slots — it keeps
+// the base class, since it is not about credits at all.
+const QUOTA_EXHAUSTED_ERRORS = Object.freeze({
+  ApiLimitExceeded: NewsdataApiLimitExceededError,
+  ApiKeyLimitExceeded: NewsdataApiKeyLimitExceededError,
+  RegistrationLimitExceeded: NewsdataRateLimitError,
+});
+
+/** The `results.code` string from an error body, if it carries one. */
+function extractErrorCode(body) {
   const results = asObject(body)?.results;
   const code = results && typeof results === 'object' ? results.code : undefined;
-  return typeof code === 'string' && QUOTA_EXHAUSTED_CODES.includes(code);
+  return typeof code === 'string' ? code : null;
+}
+
+/**
+ * The error class for a 429 whose body says the API credits are exhausted,
+ * or null when the 429 is a transient rate limit worth retrying.
+ */
+function quotaExhaustedError(body) {
+  const code = extractErrorCode(body);
+  return code !== null && QUOTA_EXHAUSTED_CODES.includes(code)
+    ? QUOTA_EXHAUSTED_ERRORS[code] ?? NewsdataRateLimitError
+    : null;
 }
 
 /** Parse a Retry-After header (integer seconds or HTTP-date) into ms. */
@@ -104,7 +125,7 @@ export class NewsDataApiClient {
     }
   }
 
-  // ---- endpoint methods -------------------------------------------------
+  // ---- v1 endpoint methods ----------------------------------------------
 
   /** Latest news. GET /1/latest */
   latestApi(params = {}) { return this.#dispatch('latest', params); }
@@ -138,15 +159,54 @@ export class NewsDataApiClient {
     return this.#request('sources', validated);
   }
 
+  // ---- v2 endpoint methods ----------------------------------------------
+  //
+  // v2 renames the filter vocabulary to snake_case (`q_in_title`,
+  // `exclude_country`, `source_priority`, `content`, `remove_duplicate`, …)
+  // and folds domain/domainurl/excludedomain/excludedomainurl into
+  // `source_url` / `exclude_source_url`. Responses carry `total_results` and
+  // `next_page` where v1 carries `totalResults` and `nextPage`.
+
+  /** Latest news, or historical news with from_date / to_date. GET /2/news */
+  news(params = {}) { return this.#dispatch('news_v2', params, false, true); }
+
+  /** Market / financial news. GET /2/market */
+  market(params = {}) { return this.#dispatch('market_v2', params, false, true); }
+
+  /** Cryptocurrency news. GET /2/crypto */
+  crypto(params = {}) { return this.#dispatch('crypto_v2', params, false, true); }
+
+  /** Aggregate news counts. GET /2/count/news */
+  countNews(params = {}) { return this.#dispatch('count_news_v2', params, false, true); }
+
+  /** Aggregate market counts. GET /2/count/market */
+  countMarket(params = {}) { return this.#dispatch('count_market_v2', params, false, true); }
+
+  /** Aggregate crypto counts. GET /2/count/crypto */
+  countCrypto(params = {}) { return this.#dispatch('count_crypto_v2', params, false, true); }
+
+  /**
+   * List available news sources. GET /2/sources
+   * Single-page endpoint; scroll / paginate are not supported.
+   * @returns {Promise<object>}
+   */
+  sources(params = {}) {
+    const { rawQuery = null, ...rest } = params;
+    const validated = validateParams('sources_v2', rest, rawQuery);
+    return this.#request('sources_v2', validated);
+  }
+
   // ---- real-time query management ---------------------------------------
 
   /**
-   * Register a real-time WebSocket query. POST /1/websocket/register
+   * Register a real-time WebSocket query. POST /2/websocket/register
    *
-   * Takes the familiar filter names (`q`, `country`, `language`, `domain`, …);
-   * no date or paging filters apply, since a registered query matches news as
-   * it is published. The new query's id is at `results.registration_id` — pass
-   * it to `NewsDataApiWebSocket#stream`.
+   * The real-time service is v2 only, so this takes the same filter names as
+   * `news()` (`q`, `q_in_title`, `country`, `exclude_country`, `source_url`,
+   * `content`, `exclude_field`, `timezone`, …); the date, paging and sorting
+   * filters, `id` and `url` do not apply to a standing query. The new query's
+   * id is at `results.registration_id` — pass it to
+   * `NewsDataApiWebSocket#stream`.
    *
    * Registering an identical query twice rejects with a `NewsdataApiError`
    * whose `statusCode` is 409; the existing id is at
@@ -161,8 +221,11 @@ export class NewsDataApiClient {
   }
 
   /**
-   * List the account's registered real-time queries. GET /1/websocket/fetch
-   * One entry per query at `results.queries`.
+   * List the account's registered real-time queries. GET /2/websocket/fetch
+   * `results` is a list with one entry per query, each carrying its
+   * `registration_id`, the filters it was registered with (`query`), how many
+   * devices are streaming it now (`active_clients`) and when one last
+   * connected (`last_used`, UTC).
    * @returns {Promise<object>}
    */
   websocketFetch() {
@@ -170,7 +233,7 @@ export class NewsDataApiClient {
   }
 
   /**
-   * Delete a registered real-time query. DELETE /1/websocket/delete
+   * Delete a registered real-time query. DELETE /2/websocket/delete
    * @param {string} registrationId
    * @returns {Promise<object>}
    */
@@ -204,9 +267,10 @@ export class NewsDataApiClient {
   /**
    * Validate params and route to single / scroll / paginate execution.
    * Returns a Promise for single & scroll modes, or an async generator when
-   * `paginate: true`.
+   * `paginate: true`. `v2` selects the v2 response keys (`total_results` /
+   * `next_page`) for the multi-page modes.
    */
-  #dispatch(endpoint, params, isCount = false) {
+  #dispatch(endpoint, params, isCount = false, v2 = false) {
     const {
       rawQuery = null,
       scroll = false,
@@ -222,10 +286,10 @@ export class NewsDataApiClient {
     const validated = validateParams(endpoint, rest, rawQuery);
 
     if (paginate) {
-      return this.#paginate(endpoint, validated, maxPages ?? this.#maxPages, isCount);
+      return this.#paginate(endpoint, validated, maxPages ?? this.#maxPages, isCount, v2);
     }
     if (scroll) {
-      return this.#scrollAll(endpoint, validated, maxResult ?? this.#maxResult, isCount);
+      return this.#scrollAll(endpoint, validated, maxResult ?? this.#maxResult, isCount, v2);
     }
     return this.#request(endpoint, validated);
   }
@@ -305,10 +369,16 @@ export class NewsDataApiClient {
 
       if (status === 429) {
         const retryAfter = parseRetryAfter(res.headers.get('retry-after'));
+        const keyRemaining = res.headers.get('x-apikey-limit-remaining');
+        if (keyRemaining !== null) {
+          this.#log('warn', `X-APIKEY-Limit-Remaining: ${keyRemaining}`);
+        }
         // A 429 covers a burst limit, a rate limit, and exhausted API
         // credits. Only the first two are worth retrying.
-        if (isQuotaExhausted(body) || attempt >= this.#maxRetries) {
-          throw new NewsdataRateLimitError(
+        const QuotaError = quotaExhaustedError(body);
+        if (QuotaError !== null || attempt >= this.#maxRetries) {
+          const ErrorClass = QuotaError ?? NewsdataRateLimitError;
+          throw new ErrorClass(
             this.#errorMessage(body, status), 429, asObject(body),
             retryAfter === null ? null : Math.round(retryAfter / 1000),
           );
@@ -345,7 +415,10 @@ export class NewsDataApiClient {
    * `aggregate`.
    * @returns {Promise<object>}
    */
-  async #scrollAll(endpoint, params, maxResult, isCount) {
+  async #scrollAll(endpoint, params, maxResult, isCount, v2 = false) {
+    const [totalKey, nextKey] = v2
+      ? ['total_results', 'next_page']
+      : ['totalResults', 'nextPage'];
     const accumulated = [];
     const request = { ...params };
     let totalResults = null;
@@ -355,7 +428,7 @@ export class NewsDataApiClient {
 
     for (;;) {
       const response = await this.#request(endpoint, request);
-      totalResults = response.totalResults ?? totalResults;
+      totalResults = response[totalKey] ?? totalResults;
       const pageResults = response.results ?? [];
       if (Array.isArray(pageResults)) {
         accumulated.push(...pageResults);
@@ -363,7 +436,7 @@ export class NewsDataApiClient {
         aggregate = pageResults;
       }
       if (this.#includeHeaders) lastHeaders = response.responseHeaders;
-      nextPage = response.nextPage ?? null;
+      nextPage = response[nextKey] ?? null;
 
       if (maxResult != null && accumulated.length >= maxResult) {
         accumulated.length = maxResult;
@@ -375,7 +448,7 @@ export class NewsDataApiClient {
       await sleep(this.#paginationDelay);
     }
 
-    const merged = { totalResults, results: accumulated, nextPage };
+    const merged = { [totalKey]: totalResults, results: accumulated, [nextKey]: nextPage };
     if (aggregate !== null) merged.aggregate = aggregate;
     if (lastHeaders != null) merged.responseHeaders = lastHeaders;
     return merged;
@@ -385,7 +458,8 @@ export class NewsDataApiClient {
    * Yield one response per page, up to maxPages.
    * @returns {AsyncGenerator<object>}
    */
-  async *#paginate(endpoint, params, maxPages, isCount) {
+  async *#paginate(endpoint, params, maxPages, isCount, v2 = false) {
+    const nextKey = v2 ? 'next_page' : 'nextPage';
     const request = { ...params };
     let pages = 0;
     for (;;) {
@@ -396,7 +470,7 @@ export class NewsDataApiClient {
       // Count APIs return an object (not an array) on the final page.
       if (isCount && response.results && !Array.isArray(response.results)) return;
       if (maxPages != null && pages >= maxPages) return;
-      const nextPage = response.nextPage;
+      const nextPage = response[nextKey];
       if (!nextPage) return;
       request.page = nextPage;
       await sleep(this.#paginationDelay);

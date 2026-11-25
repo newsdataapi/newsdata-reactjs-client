@@ -73,7 +73,7 @@ function fakeWebSocketFactory(script) {
 }
 
 const article = (id, title) => JSON.stringify({
-  status: 'success', totalResults: 1, results: [{ article_id: id, title }],
+  status: 'success', total_results: 1, results: [{ id, title }],
 });
 
 function wsClient(fetchStub = stubFetch([])) {
@@ -278,7 +278,7 @@ test('stream rejects an empty registration id', async () => {
 
 // ---- query management ---------------------------------------------------
 
-test('websocketRegister POSTs and injects news_type=latest', async () => {
+test('websocketRegister POSTs and injects news_type=news', async () => {
   const fetchStub = stubFetch([
     mockResponse(200, { status: 'success', results: { registration_id: 'reg-9' } }),
   ]);
@@ -287,18 +287,34 @@ test('websocketRegister POSTs and injects news_type=latest', async () => {
 
   assert.equal(res.results.registration_id, 'reg-9');
   assert.equal(fetchStub.calls[0].method, 'POST');
-  assert.match(fetchStub.calls[0].url, /news_type=latest/);
+  assert.match(fetchStub.calls[0].url, /news_type=news/);
   assert.match(fetchStub.calls[0].url, /q=bitcoin/);
   assert.match(fetchStub.calls[0].url, /websocket\/register/);
 });
 
 test('websocketFetch GETs the fetch endpoint', async () => {
   const fetchStub = stubFetch([
-    mockResponse(200, { status: 'success', results: { queries: [] } }),
+    mockResponse(200, { status: 'success', total_results: 0, results: [] }),
   ]);
   await wsClient(fetchStub).websocketFetch();
   assert.equal(fetchStub.calls[0].method, 'GET');
   assert.match(fetchStub.calls[0].url, /websocket\/fetch/);
+});
+
+test('websocketFetch returns one flat entry per registered query', async () => {
+  const entry = {
+    registration_id: 'reg-9',
+    active_clients: 2,
+    last_used: '2026-11-20T10:15:00Z',
+    news_type: 'news',
+    query: { q: 'pizza' },
+  };
+  const fetchStub = stubFetch([
+    mockResponse(200, { status: 'success', total_results: 1, results: [entry] }),
+  ]);
+  const res = await wsClient(fetchStub).websocketFetch();
+  assert.equal(res.total_results, 1);
+  assert.deepEqual(res.results, [entry]);
 });
 
 test('websocketDelete uses DELETE and carries registration_id', async () => {
@@ -328,4 +344,90 @@ test('the WebSocket class delegates management calls to the client', async () =>
   const ws = new NewsDataApiWebSocket(wsClient(fetchStub), { WebSocket: FakeWebSocket });
   const res = await ws.websocketRegister({ q: 'x' });
   assert.equal(res.results.registration_id, 'reg-7');
+});
+
+// ---- API version 2 ------------------------------------------------------
+// The real-time service moved to API version 2: the management endpoints sit
+// under /2/, `news_type` names the v2 news feed, and a registration takes the
+// v2 filter vocabulary only.
+
+test('the management endpoints are under API version 2', async () => {
+  const cases = [
+    [(c) => c.websocketRegister({ q: 'x' }), '2/websocket/register'],
+    [(c) => c.websocketFetch(), '2/websocket/fetch'],
+    [(c) => c.websocketDelete('reg-1'), '2/websocket/delete'],
+  ];
+  for (const [call, path] of cases) {
+    const fetchStub = stubFetch([mockResponse(200, { status: 'success' })]);
+    await call(wsClient(fetchStub));
+    assert.ok(fetchStub.calls[0].url.includes(path), `${path}: ${fetchStub.calls[0].url}`);
+  }
+});
+
+test('websocketRegister accepts the v2 filter names', async () => {
+  const fetchStub = stubFetch([
+    mockResponse(200, { status: 'success', results: { registration_id: 'reg-1' } }),
+  ]);
+  await wsClient(fetchStub).websocketRegister({
+    q_in_meta: 'crypto',
+    exclude_country: 'us',
+    source_url: 'bbc.com',
+    source_priority: 'top',
+    content: true,
+    remove_duplicate: true,
+    exclude_field: 'description',
+  });
+  const { url } = fetchStub.calls[0];
+  assert.match(url, /q_in_meta=crypto/);
+  assert.match(url, /exclude_country=us/);
+  assert.match(url, /source_url=bbc.com/);
+  assert.match(url, /source_priority=top/);
+  assert.match(url, /content=1/);
+  assert.match(url, /remove_duplicate=1/);
+  assert.match(url, /exclude_field=description/);
+});
+
+test('websocketRegister rejects the v1 filter names', () => {
+  const retired = [
+    { qInTitle: 'x' }, { qInMeta: 'x' }, { excludecountry: 'us' },
+    { excludecategory: 'tech' }, { excludelanguage: 'en' }, { domain: 'bbc' },
+    { domainurl: 'bbc.com' }, { excludedomain: 'bbc' },
+    { excludedomainurl: 'bbc.com' }, { prioritydomain: 'top' },
+    { full_content: true }, { removeduplicate: true },
+    { excludefield: 'description' },
+  ];
+  for (const params of retired) {
+    const name = Object.keys(params)[0];
+    assert.throws(
+      () => wsClient().websocketRegister(params),
+      NewsdataValidationError,
+      `${name} is no longer a register filter`,
+    );
+  }
+});
+
+test('websocketRegister rejects a v1 name passed through rawQuery', () => {
+  assert.throws(
+    () => wsClient().websocketRegister({ rawQuery: 'qInTitle=pizza' }),
+    NewsdataValidationError,
+  );
+});
+
+test('websocketRegister keeps the v2 source_url mutex group', () => {
+  assert.throws(
+    () => wsClient().websocketRegister({
+      source_url: 'a.com', exclude_source_url: 'b.com',
+    }),
+    NewsdataValidationError,
+  );
+});
+
+test('websocketRegister rejects the date and paging filters', () => {
+  for (const params of [{ from_date: '2026-01-01' }, { page: 'p2' }, { sort: 'relevance' }]) {
+    assert.throws(
+      () => wsClient().websocketRegister(params),
+      NewsdataValidationError,
+      `${Object.keys(params)[0]} does not apply to a standing query`,
+    );
+  }
 });

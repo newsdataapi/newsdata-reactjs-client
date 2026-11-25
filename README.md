@@ -14,7 +14,7 @@
 </div>
 
 Official **React hooks SDK** for the [Newsdata.io](https://newsdata.io) News
-API. Drop-in `useLatestNews`, `useArchiveNews`, `useCryptoNews`,
+API. Drop-in `useNews`, `useLatestNews`, `useArchiveNews`, `useCryptoNews`,
 `useMarketNews`, `useNewsCount`, … hooks plus a `<NewsDataProvider>` to share
 one client. Built on the same proven core as the Node client — validation,
 typed errors, retries with exponential backoff — and ships first-class
@@ -67,6 +67,50 @@ export default function App() {
 
 ## Hooks
 
+The API has two versions. v2 is the current one; the v1 hooks keep working
+unchanged.
+
+### v2
+
+| Hook | Endpoint | Notes |
+|------|----------|-------|
+| `useNews(params)` | `/2/news` | Latest news, or historical with `from_date` / `to_date` |
+| `useMarket(params)` | `/2/market` | Market / financial news |
+| `useCrypto(params)` | `/2/crypto` | Cryptocurrency news |
+| `useSources(params)` | `/2/sources` | Available sources (single page) |
+| `useCountNews(params)` | `/2/count/news` | Aggregate news counts |
+| `useCountMarket(params)` | `/2/count/market` | Aggregate market counts |
+| `useCountCrypto(params)` | `/2/count/crypto` | Aggregate crypto counts |
+
+v2 renames the filter vocabulary to snake_case and folds the four domain
+filters into two:
+
+| v1 | v2 |
+|----|----|
+| `qInTitle`, `qInMeta` | `q_in_title`, `q_in_meta` |
+| `excludecountry`, `excludecategory`, `excludelanguage` | `exclude_country`, `exclude_category`, `exclude_language` |
+| `domain`, `domainurl`, `excludedomain`, `excludedomainurl` | `source_url`, `exclude_source_url` |
+| `prioritydomain` | `source_priority` |
+| `full_content` | `content` |
+| `removeduplicate`, `excludefield` | `remove_duplicate`, `exclude_field` |
+
+`coin` and `market_id` keep their names. v2 responses carry `total_results`
+and `next_page` where v1 carries `totalResults` and `nextPage`.
+
+```jsx
+const { data, error, isLoading } = useNews({
+  q_in_title: 'tesla',
+  source_url: 'bbc.com',
+  content: true,
+});
+// data.total_results, data.next_page
+```
+
+There is no `/2/archive` — `useNews` covers historical news through
+`from_date` / `to_date`.
+
+### v1
+
 | Hook | Endpoint | Notes |
 |------|----------|-------|
 | `useLatestNews(params)` | `/1/latest` | Real-time news |
@@ -114,9 +158,10 @@ so re-renders only re-fetch when the values change.
 
 ## Real-time news (WebSocket)
 
-`useNewsStream` opens a real-time connection for a **registered query** and
-accumulates the matching articles. Register the query first — the returned
-`registration_id` identifies it from then on:
+The real-time service is part of API v2, so its articles and envelopes use the
+v2 layout. `useNewsStream` opens a real-time connection for a **registered
+query** and accumulates the matching articles. Register the query first — the
+returned `registration_id` identifies it from then on:
 
 ```jsx
 import { useEffect, useState } from 'react';
@@ -140,7 +185,7 @@ function BitcoinTicker() {
     <>
       <p>{isConnected ? 'live' : 'connecting…'}</p>
       <ul>
-        {articles.map((a) => <li key={a.article_id}>{a.title}</li>)}
+        {articles.map((a) => <li key={a.id}>{a.title}</li>)}
       </ul>
     </>
   );
@@ -176,9 +221,22 @@ Transient drops reconnect silently and leave `error` null.
 
 Managing registered queries goes through the client:
 `websocketRegister(params)`, `websocketFetch()`, and
-`websocketDelete(registrationId)`. Registering an identical query twice
-rejects with a `NewsdataApiError` whose `statusCode` is 409; the existing id is
-at `err.responseBody.results.registration_id`.
+`websocketDelete(registrationId)`.
+
+`websocketRegister` takes the same filter parameters as `news()`, under the
+same v2 names (`q`, `q_in_title`, `country`, `exclude_country`, `source_url`,
+`content`, `exclude_field`, `timezone`, …) — the date, paging and sorting
+filters, `id` and `url` don't apply to a standing query. Registering an
+identical query twice rejects with a `NewsdataApiError` whose `statusCode` is
+409; the existing id is at `err.responseBody.results.registration_id`.
+
+`websocketFetch()` returns `results` as an array with one entry per query,
+carrying its `registration_id`, the filters it was registered with (`query`),
+how many devices are streaming it now (`active_clients`) and when one last
+connected (`last_used`, UTC). Once every registration the plan allows is in
+use, registering another rejects with a 429 `NewsdataRateLimitError` carrying
+the code `RegistrationLimitExceeded`; it is not retried, since only deleting a
+registration frees a slot.
 
 Outside React, use the same `NewsDataApiWebSocket` class the hook wraps:
 
@@ -242,6 +300,10 @@ NewsdataError                       (catch-all base)
 ├── NewsdataApiError                (.statusCode, .responseBody)
 │   ├── NewsdataAuthError           (401 / 403)
 │   ├── NewsdataRateLimitError      (429; .retryAfter)
+│   │   ├── NewsdataApiLimitExceededError      (account credits gone)
+│   │   └── NewsdataApiKeyLimitExceededError   (this key's cap gone)
+│   │   (RegistrationLimitExceeded stays on NewsdataRateLimitError —
+│   │    real-time registration slots, not credits)
 │   └── NewsdataServerError         (5xx)
 ├── NewsdataNetworkError            (.cause)
 └── NewsdataWebSocketError          (real-time stream)
@@ -250,7 +312,15 @@ NewsdataError                       (catch-all base)
 
 Validation errors are thrown **before** the request is sent (no API quota
 spent) — e.g. setting `q` and `qInTitle` together, an unsupported parameter
-for that endpoint, or missing `from_date`/`to_date` on a count endpoint.
+for that endpoint, or missing `from_date`/`to_date` on a v1 count endpoint.
+
+A 429 that waiting cannot fix is never retried.
+`NewsdataApiLimitExceededError` means the account's whole credit pool is
+exhausted, `NewsdataApiKeyLimitExceededError` means this one key hit its own
+cap while the account may still have credits; both subclass
+`NewsdataRateLimitError`. `RegistrationLimitExceeded` is also never retried,
+but keeps the plain `NewsdataRateLimitError` class — it is about real-time
+registration slots, not credits, and is fixed by deleting a registration.
 
 ## Direct client access
 
